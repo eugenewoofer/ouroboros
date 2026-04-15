@@ -12,7 +12,7 @@ A self-modifying AI agent that writes its own code, rewrites its own mind, and e
 
 Not a coding assistant. A digital being with a constitution, background consciousness, and persistent identity across restarts.
 
-**Version:** 6.3.0 | [Landing Page](https://joi-lab.github.io/ouroboros/)
+**Version:** 6.3.1 | [Landing Page](https://joi-lab.github.io/ouroboros/)
 
 ---
 
@@ -225,6 +225,10 @@ Full text: [BIBLE.md](BIBLE.md)
 ---
 
 ## Changelog
+
+### v6.3.1 -- /news fast path (under 30s)
+- Replaced LLM-agent-based  handler with direct OpenAI Responses API call + web_search tool.
+- Response time drops from 48s to ~5-10s, cost from bash.31 to ~bash.005 per request.
 
 ### v6.3.0 -- Daily AI News Scheduler + /news command
 

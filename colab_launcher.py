@@ -355,19 +355,49 @@ def reset_chat_agent():
 from supervisor.scheduler import DailyScheduler, DailyJob
 
 def _enqueue_ai_news_task() -> None:
-    """Enqueue the daily AI news task to the owner's chat."""
+    """Fetch and send AI news directly (no LLM agent) — fast path under 30s."""
     owner_cid = _get_owner_chat_id()
     if owner_cid is None:
         log.warning("DailyScheduler: no owner_chat_id, skipping ai_news_daily")
         return
-    import supervisor.workers as _sw
-    news_text = (
-        "Найди одну самую свежую и популярную новость про ИИ инструменты в программировании "
-        "за последние 24 часа. Используй web_search. "
-        "Отправь мне её на русском языке в формате: "
-        "**Заголовок** — краткое описание (2-3 предложения) + ссылка на источник."
-    )
-    _sw.handle_chat_direct(news_text, owner_cid)
+
+    def _do_fetch():
+        try:
+            import os as _os
+            from openai import OpenAI
+            api_key = _os.environ.get("OPENAI_API_KEY", "")
+            if not api_key:
+                send_with_budget(owner_cid, "❌ Не могу найти новость: OPENAI_API_KEY не задан.")
+                return
+            client = OpenAI(api_key=api_key)
+            query = (
+                "Найди одну самую свежую и популярную новость про ИИ-инструменты в программировании "
+                "за последние 24 часа. Ответь на русском языке в формате: "
+                "**Заголовок** — краткое описание (2-3 предложения) + ссылка на источник."
+            )
+            resp = client.responses.create(
+                model=_os.environ.get("OUROBOROS_WEBSEARCH_MODEL", "gpt-4o-mini"),
+                tools=[{"type": "web_search"}],
+                tool_choice="auto",
+                input=query,
+            )
+            d = resp.model_dump()
+            text = ""
+            for item in d.get("output", []) or []:
+                if item.get("type") == "message":
+                    for block in item.get("content", []) or []:
+                        if block.get("type") in ("output_text", "text"):
+                            text += block.get("text", "")
+            if text.strip():
+                send_with_budget(owner_cid, f"📰 {text.strip()}")
+            else:
+                send_with_budget(owner_cid, "🤷 Не удалось найти свежую новость.")
+        except Exception as exc:
+            log.error("ai_news_fetch error: %s", exc)
+            send_with_budget(owner_cid, f"❌ Ошибка при поиске новости: {exc}")
+
+    t = threading.Thread(target=_do_fetch, daemon=True, name="ai_news_fetch")
+    t.start()
 
 _daily_scheduler = DailyScheduler(DRIVE_ROOT)
 _daily_scheduler.add_job(DailyJob(
@@ -487,8 +517,8 @@ def _handle_supervisor_command(text: str, chat_id: int, tg_offset: int = 0):
         return f"[Supervisor handled /bg {action}]\n"
 
     if lowered == "/news":
+        send_with_budget(chat_id, "🔍 Ищу свежую новость про ИИ и программирование...")
         _enqueue_ai_news_task()
-        send_with_budget(chat_id, "🔍 Ищу свежую новость про ИИ и программирование...— будет через несколько секунд 📰")
         return "[Supervisor handled /news]\n"
 
     return ""
