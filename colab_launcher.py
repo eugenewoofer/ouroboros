@@ -348,6 +348,36 @@ def reset_chat_agent():
     import supervisor.workers as _w
     _w._chat_agent = None
 
+
+# ----------------------------
+# 6.4) Daily scheduler
+# ----------------------------
+from supervisor.scheduler import DailyScheduler, DailyJob
+
+def _enqueue_ai_news_task() -> None:
+    """Enqueue the daily AI news task to the owner's chat."""
+    owner_cid = _get_owner_chat_id()
+    if owner_cid is None:
+        log.warning("DailyScheduler: no owner_chat_id, skipping ai_news_daily")
+        return
+    import supervisor.workers as _sw
+    news_text = (
+        "Найди одну самую свежую и популярную новость про ИИ инструменты в программировании "
+        "за последние 24 часа. Используй web_search. "
+        "Отправь мне её на русском языке в формате: "
+        "**Заголовок** — краткое описание (2-3 предложения) + ссылка на источник."
+    )
+    _sw.handle_chat_direct(news_text, owner_cid)
+
+_daily_scheduler = DailyScheduler(DRIVE_ROOT)
+_daily_scheduler.add_job(DailyJob(
+    name="ai_news_daily",
+    utc_hour=7,
+    utc_minute=0,
+    handler=_enqueue_ai_news_task,
+))
+_daily_scheduler.start()
+
 # ----------------------------
 # 7) Main loop
 # ----------------------------
@@ -455,6 +485,11 @@ def _handle_supervisor_command(text: str, chat_id: int, tg_offset: int = 0):
             bg_status = "running" if _consciousness.is_running else "stopped"
             send_with_budget(chat_id, f"🧠 Background consciousness: {bg_status}")
         return f"[Supervisor handled /bg {action}]\n"
+
+    if lowered == "/news":
+        _enqueue_ai_news_task()
+        send_with_budget(chat_id, "🔍 Ищу свежую новость про ИИ и программирование...— будет через несколько секунд 📰")
+        return "[Supervisor handled /news]\n"
 
     return ""
 
