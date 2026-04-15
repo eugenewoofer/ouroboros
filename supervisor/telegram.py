@@ -166,6 +166,27 @@ class TelegramClient:
             return None, ""
 
 
+
+    def set_my_commands(self, commands: list) -> bool:
+        """Register bot commands for the command menu in Telegram.
+        commands: list of dicts with 'command' and 'description' keys.
+        Returns True on success."""
+        try:
+            r = requests.post(
+                f"{self.base}/setMyCommands",
+                json={"commands": commands},
+                timeout=10,
+            )
+            data = r.json()
+            if data.get("ok"):
+                log.info("setMyCommands OK: %d commands registered", len(commands))
+                return True
+            log.warning("setMyCommands failed: %s", data)
+            return False
+        except Exception:
+            log.warning("setMyCommands exception", exc_info=True)
+            return False
+
 # ---------------------------------------------------------------------------
 # Message splitting + formatting
 # ---------------------------------------------------------------------------

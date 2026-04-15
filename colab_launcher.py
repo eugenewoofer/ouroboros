@@ -277,6 +277,19 @@ append_jsonl(DRIVE_ROOT / "logs" / "supervisor.jsonl", {
 # ----------------------------
 auto_resume_after_restart()
 
+
+# ----------------------------
+# 6.1.1) Register bot commands
+# ----------------------------
+TG.set_my_commands([
+    {"command": "news",    "description": "Свежая новость про ИИ и программирование"},
+    {"command": "status",  "description": "Состояние агента, бюджет, версия"},
+    {"command": "bg",      "description": "Статус / управление фоновым сознанием"},
+    {"command": "restart", "description": "Перезапустить агента"},
+    {"command": "review",  "description": "Стратегическая рефлексия"},
+    {"command": "evolve",  "description": "Запустить цикл эволюции"},
+])
+
 # ----------------------------
 # 6.2) Direct-mode watchdog
 # ----------------------------
