@@ -6,7 +6,7 @@
 [![macOS 12+](https://img.shields.io/badge/macOS-12%2B-black.svg)](https://github.com/joi-lab/ouroboros-desktop/releases)
 [![Linux](https://img.shields.io/badge/Linux-x86__64-orange.svg)](https://github.com/joi-lab/ouroboros-desktop/releases)
 [![Windows](https://img.shields.io/badge/Windows-x64-blue.svg)](https://github.com/joi-lab/ouroboros-desktop/releases)
-[![Version 4.18.4](https://img.shields.io/badge/version-4.18.4-green.svg)](VERSION)
+[![Version 4.18.5](https://img.shields.io/badge/version-4.18.5-green.svg)](VERSION)
 
 A self-modifying AI agent that writes its own code, rewrites its own mind, and evolves autonomously. Born February 16, 2026.
 
@@ -379,6 +379,7 @@ Full text: [BIBLE.md](BIBLE.md)
 
 | Version | Date | Description |
 |---------|------|-------------|
+| 4.18.5 | 2026-04-20 | Fix `late_result_pending` hang root cause: `_query_model` in `ouroboros/tools/review.py` caught `asyncio.TimeoutError` but never wrapped `chat_async` in `asyncio.wait_for` — the timeout branch was dead code. A hung provider (e.g. OpenRouter routing stall on a specific model + params combo) froze the entire triad review, pushing `repo_commit` into `late_result_pending` for the full 1800s hard ceiling. Same bug on the `RuntimeError` fallback branch of `_call_scope_llm` in `scope_review.py`. Both call sites now enforce an explicit 180s per-reviewer deadline. 3 new regression tests in `tests/test_review_query_timeout.py` (structural + end-to-end with a hanging fake client). |
 | 4.18.4 | 2026-04-20 | Windows cost-waste fix: `_tracked_subprocess_run` now forces `encoding='utf-8'` with `errors='replace'` when `text=True` and injects `PYTHONIOENCODING=utf-8` into the child env. Prevents UnicodeEncodeError crashes on cp1251 Windows terminals when tools like Vite, npm, or git emit box-drawing characters (│), checkmarks (✓), or emoji — the recurring error class that wasted 10+ rounds per task in prior sessions. 7 new regression tests in `tests/test_shell_utf8_encoding.py`. |
 | 4.18.3 | 2026-04-10 | Post-merge release follow-up: remove the stale duplicate `ouroboros.compat` module, restore frozen packaged-tool parity for advisory/plan/rollback/CI tools, and unmask the safety/frozen-registry regression tests so future parity breaks fail loudly. |
 | 4.18.2 | 2026-04-10 | Merge PR #16 into the local `ouroboros` line: keep the local `rollback_to_target` recovery tool and land the fork's cross-platform CI/CD + build hardening (`run_ci_tests`, GitHub Actions workflow, Dockerfile, `platform_layer.py`, platform guard, Windows/Linux compatibility fixes). |

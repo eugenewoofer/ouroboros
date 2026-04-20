@@ -131,15 +131,24 @@ def _handle_multi_model_review(ctx: ToolContext, content: str = "",
         return json.dumps({"error": f"Review failed: {e}"}, ensure_ascii=False)
 
 
+_QUERY_MODEL_TIMEOUT_SEC = 180
+
+
 async def _query_model(llm_client: LLMClient, model: str, messages: list, semaphore):
     async with semaphore:
         try:
-            msg, usage = await llm_client.chat_async(
-                messages=messages,
-                model=model,
-                reasoning_effort="medium",
-                max_tokens=32768,
-                temperature=0.2,
+            # Hard per-reviewer deadline. Without this, a hung provider (bad routing,
+            # missing endpoint, stalled TLS) would freeze the entire review and push
+            # the commit tool into late_result_pending for the full hard ceiling.
+            msg, usage = await asyncio.wait_for(
+                llm_client.chat_async(
+                    messages=messages,
+                    model=model,
+                    reasoning_effort="medium",
+                    max_tokens=32768,
+                    temperature=0.2,
+                ),
+                timeout=_QUERY_MODEL_TIMEOUT_SEC,
             )
             payload = {
                 "choices": [{"message": {"content": msg.get("content") or ""}}],
@@ -147,7 +156,11 @@ async def _query_model(llm_client: LLMClient, model: str, messages: list, semaph
             }
             return model, payload, None
         except asyncio.TimeoutError:
-            return model, "Error: Timeout after 120s", None
+            return (
+                model,
+                f"Error: Timeout after {_QUERY_MODEL_TIMEOUT_SEC}s",
+                None,
+            )
         except Exception as e:
             error_msg = str(e)[:200]
             return model, f"Error: {error_msg}", None

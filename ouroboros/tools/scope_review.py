@@ -506,12 +506,29 @@ def _call_scope_llm(prompt: str) -> tuple:
     ]
     llm = LLMClient()
     try:
+        # Both branches enforce a hard 180s deadline. Without an explicit timeout
+        # on the fallback (RuntimeError) path, a hung provider would freeze the
+        # commit pipeline for the full reviewed-mutative hard ceiling.
         try:
             asyncio.get_running_loop()
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 msg, usage = pool.submit(
                     asyncio.run,
+                    asyncio.wait_for(
+                        llm.chat_async(
+                            messages=messages,
+                            model=scope_model,
+                            reasoning_effort=scope_effort,
+                            max_tokens=_SCOPE_MAX_TOKENS,
+                            temperature=0.2,
+                        ),
+                        timeout=180,
+                    ),
+                ).result(timeout=195)
+        except RuntimeError:
+            msg, usage = asyncio.run(
+                asyncio.wait_for(
                     llm.chat_async(
                         messages=messages,
                         model=scope_model,
@@ -519,15 +536,7 @@ def _call_scope_llm(prompt: str) -> tuple:
                         max_tokens=_SCOPE_MAX_TOKENS,
                         temperature=0.2,
                     ),
-                ).result(timeout=180)
-        except RuntimeError:
-            msg, usage = asyncio.run(
-                llm.chat_async(
-                    messages=messages,
-                    model=scope_model,
-                    reasoning_effort=scope_effort,
-                    max_tokens=_SCOPE_MAX_TOKENS,
-                    temperature=0.2,
+                    timeout=180,
                 )
             )
     except Exception as e:
