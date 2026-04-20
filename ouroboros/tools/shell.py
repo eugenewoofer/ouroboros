@@ -37,10 +37,33 @@ def _tracked_subprocess_run(cmd, **kwargs):
 
     Each subprocess gets its own session (start_new_session=True) so the
     entire process tree can be killed via os.killpg() on panic.
+
+    On Windows (and wherever the caller uses text=True without an explicit
+    encoding), force UTF-8 with errors='replace' so that non-ASCII output
+    from tools like Vite, npm, git, etc. (box-drawing chars, checkmarks,
+    emoji) doesn't crash the parent with UnicodeEncodeError under cp1251.
+    Also inject PYTHONIOENCODING=utf-8 into the child env so inline Python
+    scripts don't fail when printing non-ASCII text.
     """
     timeout = kwargs.pop("timeout", None)
     kwargs.update(subprocess_new_group_kwargs())
     kwargs.setdefault("stdin", subprocess.DEVNULL)
+
+    # Force UTF-8 decoding for text-mode pipes (prevents cp1251 crashes on Windows).
+    if kwargs.get("text") and "encoding" not in kwargs:
+        kwargs["encoding"] = "utf-8"
+        kwargs.setdefault("errors", "replace")
+
+    # Inject PYTHONIOENCODING=utf-8 into child env so inline `python -c` scripts
+    # don't crash when printing non-ASCII output (box-drawing, checkmarks, emoji).
+    child_env = kwargs.get("env")
+    if child_env is None:
+        child_env = os.environ.copy()
+    else:
+        child_env = dict(child_env)
+    child_env.setdefault("PYTHONIOENCODING", "utf-8")
+    kwargs["env"] = child_env
+
     proc = Popen(cmd, **kwargs)
     with _subprocess_lock:
         _active_subprocesses.add(proc)
