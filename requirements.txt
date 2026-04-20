@@ -1,5 +1,7 @@
 openai>=1.66.0
 requests
+# socks/http proxy support for httpx (used by web_search via OPENAI_HTTPS_PROXY)
+socksio
 dulwich
 starlette
 python-multipart

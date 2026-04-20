@@ -94,6 +94,14 @@ SETTINGS_DEFAULTS = {
     "USE_LOCAL_LIGHT": False,
     "USE_LOCAL_FALLBACK": False,
     "OUROBOROS_FILE_BROWSER_DEFAULT": "",
+    # Optional SOCKS5 / HTTP proxy URL used only for official OpenAI calls
+    # (web_search + any openai:: model routed through tools/search.py and
+    # llm.py's direct-OpenAI path). Format examples:
+    #   socks5h://user:pass@host:port   (SOCKS5 with DNS via proxy — preferred)
+    #   http://user:pass@host:port      (HTTP proxy with Basic auth)
+    # Empty value disables proxying. Does NOT affect OpenRouter, Anthropic,
+    # GitHub, or other providers.
+    "OPENAI_HTTPS_PROXY": "",
 }
 
 _VALID_EFFORTS = ("none", "low", "medium", "high")
@@ -316,6 +324,7 @@ def apply_settings_to_env(settings: dict) -> None:
         "LOCAL_MODEL_CHAT_FORMAT",
         "USE_LOCAL_MAIN", "USE_LOCAL_CODE", "USE_LOCAL_LIGHT", "USE_LOCAL_FALLBACK",
         "OUROBOROS_FILE_BROWSER_DEFAULT",
+        "OPENAI_HTTPS_PROXY",
     ]
     for k in env_keys:
         val = settings.get(k)

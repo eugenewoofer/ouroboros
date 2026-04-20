@@ -49,6 +49,30 @@ def _resolve_openai_client_settings() -> tuple[str, str | None, str, str]:
     return "", None, "openai", "openai"
 
 
+def _build_proxied_http_client():
+    """Return an httpx.Client bound to OPENAI_HTTPS_PROXY, or None if unset.
+
+    Used only for official OpenAI calls when the host cannot reach
+    api.openai.com directly (geoblock, corporate firewall). Supports
+    socks5h:// (preferred — DNS through proxy), socks5://, http://,
+    https://. Returns None when no proxy is configured, so callers keep
+    the default openai client unchanged.
+    """
+    proxy = (os.environ.get("OPENAI_HTTPS_PROXY", "") or "").strip()
+    if not proxy:
+        return None
+    try:
+        import httpx
+    except ImportError:
+        log.warning("OPENAI_HTTPS_PROXY set but httpx is not available")
+        return None
+    try:
+        return httpx.Client(proxy=proxy, timeout=httpx.Timeout(60.0, connect=20.0))
+    except Exception as exc:
+        log.warning("Failed to build proxied httpx client: %r", exc)
+        return None
+
+
 def _web_search(
     ctx: ToolContext,
     query: str,
@@ -69,9 +93,13 @@ def _web_search(
     active_context = search_context_size or DEFAULT_SEARCH_CONTEXT_SIZE
     active_effort = reasoning_effort or DEFAULT_REASONING_EFFORT
 
+    http_client = _build_proxied_http_client()
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=api_key, base_url=base_url)
+        oa_kwargs: Dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+        if http_client is not None:
+            oa_kwargs["http_client"] = http_client
+        client = OpenAI(**oa_kwargs)
 
         # --- Streaming path: emit progress while the search runs ---
         stream = client.responses.create(
@@ -147,6 +175,12 @@ def _web_search(
         return json.dumps({"answer": text or "(no answer)"}, ensure_ascii=False, indent=2)
     except Exception as e:
         return json.dumps({"error": f"OpenAI web search failed: {repr(e)}"}, ensure_ascii=False)
+    finally:
+        if http_client is not None:
+            try:
+                http_client.close()
+            except Exception:
+                log.debug("Failed to close proxied httpx client", exc_info=True)
 
 
 def get_tools() -> List[ToolEntry]:

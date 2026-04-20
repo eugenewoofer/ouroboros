@@ -31,9 +31,10 @@ def _make_openai_module(calls: dict):
             return _FakeStream()
 
     class _Client:
-        def __init__(self, api_key=None, base_url=None):
+        def __init__(self, api_key=None, base_url=None, http_client=None):
             calls["api_key"] = api_key
             calls["base_url"] = base_url
+            calls["http_client"] = http_client
             self.responses = _Responses()
 
     return types.SimpleNamespace(OpenAI=_Client)
@@ -71,3 +72,59 @@ def test_web_search_uses_official_openai_responses(monkeypatch):
     assert calls["kwargs"]["tools"][0]["type"] == "web_search"
     assert ctx.pending_events[0]["provider"] == "openai"
     assert ctx.pending_events[0]["model"] == "gpt-5.2"
+    # No proxy set -> OpenAI client gets no custom http_client (default path).
+    assert calls["http_client"] is None
+
+
+def test_web_search_uses_openai_https_proxy_when_set(monkeypatch):
+    """OPENAI_HTTPS_PROXY routes the OpenAI client through a proxied httpx.Client."""
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.setenv("OPENAI_HTTPS_PROXY", "socks5h://user:pw@example:1080")
+
+    calls = {}
+    monkeypatch.setitem(sys.modules, "openai", _make_openai_module(calls))
+
+    sentinel_client = object()
+    close_calls = {"n": 0}
+
+    class _Sentinel:
+        def close(self):
+            close_calls["n"] += 1
+
+    sentinel = _Sentinel()
+    monkeypatch.setattr(search_module, "_build_proxied_http_client", lambda: sentinel)
+
+    ctx = types.SimpleNamespace(pending_events=[])
+    result = json.loads(search_module._web_search(ctx, "latest news"))
+
+    assert result == {"answer": "fresh answer"}
+    assert calls["http_client"] is sentinel
+    # http_client must be closed after the call to avoid socket leaks.
+    assert close_calls["n"] == 1
+
+
+def test_build_proxied_http_client_returns_none_without_env(monkeypatch):
+    """No OPENAI_HTTPS_PROXY env -> no client, default OpenAI path preserved."""
+    monkeypatch.delenv("OPENAI_HTTPS_PROXY", raising=False)
+    assert search_module._build_proxied_http_client() is None
+
+
+def test_build_proxied_http_client_empty_env_returns_none(monkeypatch):
+    """Empty/whitespace OPENAI_HTTPS_PROXY is treated as unset."""
+    monkeypatch.setenv("OPENAI_HTTPS_PROXY", "   ")
+    assert search_module._build_proxied_http_client() is None
+
+
+def test_build_proxied_http_client_builds_httpx_client(monkeypatch):
+    """With a valid proxy URL, returns a real httpx.Client bound to that proxy."""
+    monkeypatch.setenv("OPENAI_HTTPS_PROXY", "socks5h://u:p@host:1080")
+    client = search_module._build_proxied_http_client()
+    try:
+        assert client is not None
+        # httpx stores proxy on its mounts; existence of the client is enough.
+        import httpx
+        assert isinstance(client, httpx.Client)
+    finally:
+        if client is not None:
+            client.close()

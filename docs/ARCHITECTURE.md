@@ -1,4 +1,4 @@
-# Ouroboros v4.18.5 — Architecture & Reference
+# Ouroboros v4.18.6 — Architecture & Reference
 
 This document describes every component, page, button, API endpoint, and data flow.
 It is the single source of truth for how the system works. Keep it updated.
@@ -1020,6 +1020,7 @@ Settings file: `~/Ouroboros/data/settings.json`. File-locked for concurrent acce
 | GITHUB_TOKEN | "" | Optional. GitHub PAT for remote sync |
 | GITHUB_REPO | "" | Optional. GitHub repo (owner/name) for sync |
 | OUROBOROS_FILE_BROWSER_DEFAULT | "" | Explicit Files tab root. Required for Docker/non-localhost Files access |
+| OPENAI_HTTPS_PROXY | "" | Optional. SOCKS5/HTTP proxy for `web_search` when direct OpenAI access is geoblocked. Format: `socks5h://user:pass@host:port` (preferred) or `http://user:pass@host:port`. Does not affect OpenRouter/Anthropic/GitHub traffic. |
 
 ---
 
